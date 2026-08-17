@@ -14,7 +14,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class MoviesHandler extends BaseHttpHandler {
 
     private final MoviesStore moviesStore;
-    private final static int currentYear = LocalDate.now().getYear();
+    private static final int currentYear = LocalDate.now().getYear();
 
     public MoviesHandler(MoviesStore moviesStore) {
         this.moviesStore = moviesStore;
