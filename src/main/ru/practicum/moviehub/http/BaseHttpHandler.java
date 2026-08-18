@@ -3,10 +3,12 @@ package ru.practicum.moviehub.http;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import ru.practicum.moviehub.api.ErrorResponse;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public abstract class BaseHttpHandler implements HttpHandler {
 
@@ -29,15 +31,15 @@ public abstract class BaseHttpHandler implements HttpHandler {
 
     protected void sendMethodNotAllowed(HttpExchange ex, String method) throws IOException {
         ex.getResponseHeaders().set("Allow", "GET, POST, DELETE");
-        String message = "Метод " + method + " не поддерживается. Допустимые методы: GET, POST, DELETE";
 
-        String json = gson.toJson(message);
-        byte[] response = json.getBytes(StandardCharsets.UTF_8);
+        String message = "Метод " + method
+                + " не поддерживается. Допустимые методы: GET, POST, DELETE";
 
-        ex.getResponseHeaders().set("Content-Type", CT_JSON);
-        ex.sendResponseHeaders(405, response.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            os.write(response);
-        }
+        ErrorResponse errorResponse = new ErrorResponse(
+                "Метод не поддерживается",
+                List.of(message)
+        );
+
+        sendJson(ex, 405, gson.toJson(errorResponse));
     }
 }

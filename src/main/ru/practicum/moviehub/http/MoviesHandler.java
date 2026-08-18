@@ -1,5 +1,6 @@
 package ru.practicum.moviehub.http;
 
+import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.HttpExchange;
 import ru.practicum.moviehub.api.ErrorResponse;
 import ru.practicum.moviehub.model.Movie;
@@ -73,7 +74,8 @@ public class MoviesHandler extends BaseHttpHandler {
             sendError(ex, 400, "Некорректный параметр запроса — 'year'",
                     "Год должен быть числом из 4х цифр");
         } else if (Integer.parseInt(year) < 1888 || Integer.parseInt(year) > currentYear + 1) {
-            sendError(ex, 422, "Ошибка валидации", "Год должен быть между 1888 и " + (currentYear + 1));
+            sendError(ex, 400, "Некорректный параметр запроса — 'year'",
+                    "Год должен быть между 1888 и " + (currentYear + 1));
         } else {
             String json = gson.toJson(moviesStore.findMoviesByYear(Integer.parseInt(year)));
             sendJson(ex, 200, json);
@@ -81,36 +83,66 @@ public class MoviesHandler extends BaseHttpHandler {
     }
 
     private void handlePost(HttpExchange ex) throws IOException {
-        try {
-            String requestBody = new String(ex.getRequestBody().readAllBytes(), UTF_8);
-            if (requestBody.trim().isEmpty()) {
-                sendError(ex, 400, "Ошибка формата запроса", "Тело запроса не должно быть пустым");
-                return;
-            }
+        List<String> contentTypeErrors = validateContentType(ex);
 
-            Movie movie = gson.fromJson(requestBody, Movie.class);
-            if (movie == null) {
-                sendError(ex, 400, "Ошибка формата запроса", "Некорректный JSON");
-                return;
-            }
-
-            List<String> validationErrors = validateMovie(movie);
-            List<String> contentTypeErrors = validateContentType(ex);
-
-            if (!contentTypeErrors.isEmpty()) {
-                String json = gson.toJson(new ErrorResponse("Ошибка формата запроса", contentTypeErrors));
-                sendJson(ex, 415, json);
-            } else if (!validationErrors.isEmpty()) {
-                String json = gson.toJson(new ErrorResponse("Ошибка валидации", validationErrors));
-                sendJson(ex, 422, json);
-            } else {
-                moviesStore.addMovie(movie);
-                String json = gson.toJson(movie);
-                sendJson(ex, 201, json);
-            }
-        } catch (Exception e) {
-            sendError(ex, 400, "Ошибка формата запроса", "Некорректный JSON: " + e.getMessage());
+        if (!contentTypeErrors.isEmpty()) {
+            String json = gson.toJson(
+                    new ErrorResponse("Ошибка формата запроса", contentTypeErrors)
+            );
+            sendJson(ex, 415, json);
+            return;
         }
+
+        String requestBody = new String(ex.getRequestBody().readAllBytes(), UTF_8);
+
+        if (requestBody.trim().isEmpty()) {
+            sendError(
+                    ex,
+                    400,
+                    "Ошибка формата запроса",
+                    "Тело запроса не должно быть пустым"
+            );
+            return;
+        }
+
+        Movie movie;
+
+        try {
+            movie = gson.fromJson(requestBody, Movie.class);
+        } catch (JsonSyntaxException e) {
+            sendError(
+                    ex,
+                    400,
+                    "Ошибка формата запроса",
+                    "Некорректный JSON"
+            );
+            return;
+        }
+
+        if (movie == null) {
+            sendError(
+                    ex,
+                    400,
+                    "Ошибка формата запроса",
+                    "Некорректный JSON"
+            );
+            return;
+        }
+
+        List<String> validationErrors = validateMovie(movie);
+
+        if (!validationErrors.isEmpty()) {
+            String json = gson.toJson(
+                    new ErrorResponse("Ошибка валидации", validationErrors)
+            );
+            sendJson(ex, 422, json);
+            return;
+        }
+
+        moviesStore.addMovie(movie);
+
+        String json = gson.toJson(movie);
+        sendJson(ex, 201, json);
     }
 
     private void handleDelete(HttpExchange ex, String path, String[] split) throws IOException {
@@ -141,7 +173,12 @@ public class MoviesHandler extends BaseHttpHandler {
         if (id == null || !id.matches("\\d+")) {
             return Optional.empty();
         }
-        return Optional.of(Integer.parseInt(id));
+
+        try {
+            return Optional.of(Integer.parseInt(id));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     private String extractYearParam(String query) {
